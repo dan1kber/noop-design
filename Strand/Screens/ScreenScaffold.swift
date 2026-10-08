@@ -76,6 +76,7 @@ struct ScreenScaffold<Content: View, Trailing: View>: View {
         .background(alignment: .top) {
             ZStack(alignment: .top) {
                 StrandPalette.surfaceBase
+                NoopDotGrid()
                 topBackground
             }
             .ignoresSafeArea()
