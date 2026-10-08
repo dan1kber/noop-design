@@ -1,0 +1,57 @@
+name: W3P iOS build
+
+# Builds the real iOS app from the w3p-app branch as an unsigned .ipa for sideloading and keeps it
+# as a run artifact. Unlike the fork testing build it publishes no release.
+on:
+  workflow_dispatch:
+  push:
+    branches: [w3p-app]
+    paths-ignore:
+      - 'design/**'
+      - 'docs/**'
+      - 'android/**'
+      - '**.md'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: w3p-ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ios:
+    # iOS 26 Liquid Glass (glassEffect) needs the iOS 26 SDK, so Xcode 26 on macos-26.
+    runs-on: macos-26
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate Xcode project
+        run: xcodegen generate
+      - name: Build NOOPiOS for device (unsigned, Release)
+        run: >-
+          set -o pipefail;
+          xcodebuild -scheme NOOPiOS -configuration Release -destination 'generic/platform=iOS'
+          -derivedDataPath build/dd
+          CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=""
+          build 2>&1 | tee build.log | grep -E "error:|warning: unre|BUILD|\*\*" || true;
+          grep -q "BUILD SUCCEEDED" build.log
+      - name: Show errors
+        if: failure()
+        run: grep -n -B2 -A6 "error:" build.log | head -300 || tail -80 build.log
+      - name: Package sideload .ipa
+        run: |
+          APP=$(find build/dd/Build/Products/Release-iphoneos -maxdepth 1 -name '*.app' -type d | head -1)
+          test -n "$APP" || { echo ".app (iphoneos) not found"; exit 1; }
+          rm -rf "$APP/Watch"
+          test -d "$APP/PlugIns/NOOPWidgets.appex" || { echo "NOOPWidgets.appex missing"; exit 1; }
+          Tools/prepare-ios-sideload-app.sh "$APP"
+          rm -rf Payload && mkdir Payload && cp -R "$APP" Payload/
+          zip -qr W3P-ios-unsigned.ipa Payload
+      - uses: actions/upload-artifact@v4
+        with:
+          name: W3P-ios-unsigned
+          path: W3P-ios-unsigned.ipa
+          if-no-files-found: error
