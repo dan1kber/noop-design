@@ -1,0 +1,28 @@
+name: W3P prototype IPA
+
+# Packs the W3P design mockup (design/W3P-prototype.html) into an unsigned web-view shell .ipa for
+# sideloading. It is the clickable prototype with example data, not the app itself.
+on:
+  workflow_dispatch:
+  push:
+    branches: [w3p-prototype]
+    paths:
+      - 'design/**'
+      - '.github/workflows/w3p-prototype-ipa.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - name: Build unsigned IPA
+        run: design/ios-shell/build.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: W3P-prototype-ipa
+          path: build/w3p-prototype/W3P-prototype.ipa
+          if-no-files-found: error
